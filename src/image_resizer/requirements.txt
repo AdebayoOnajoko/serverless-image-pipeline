@@ -1,0 +1,2 @@
+# Runtime dependencies for the function itself.
+# boto3 is included in the Lambda runtime; Pillow comes from the Pillow layer.

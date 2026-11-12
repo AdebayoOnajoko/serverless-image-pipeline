@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Serverless image processing pipeline. Images uploaded to the original bucket
+  (or sent to POST /resize) run a Step Functions workflow that invokes a
+  Pillow-based Lambda function and stores a thumbnail in the resized bucket.
+
+Parameters:
+  ThumbnailMaxSize:
+    Type: Number
+    Default: 200
+    MinValue: 16
+    MaxValue: 2000
+    Description: Longest side of the thumbnail in pixels (aspect ratio is kept).
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [x86_64]
+    MemorySize: 512
+    Timeout: 30
+
+Resources:
+  # ---------------------------------------------------------------- Storage
+  OriginalImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-original-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+
+  ResizedImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-resized-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ---------------------------------------------------------------- Compute
+  PillowLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "${AWS::StackName}-pillow"
+      Description: Pillow for Python 3.13 on Amazon Linux 2023 (x86_64)
+      ContentUri: layers/pillow/
+      CompatibleRuntimes: [python3.13]
+      CompatibleArchitectures: [x86_64]
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  ImageResizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-image-resizer"
+      Description: Creates a thumbnail of an image in the original bucket.
+      CodeUri: src/image_resizer/
+      Handler: app.lambda_handler
+      Layers:
+        - !Ref PillowLayer
+      Environment:
+        Variables:
+          SOURCE_BUCKET: !Ref OriginalImagesBucket
+          DESTINATION_BUCKET: !Ref ResizedImagesBucket
+          THUMBNAIL_MAX_SIZE: !Ref ThumbnailMaxSize
+          LOG_LEVEL: INFO
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref OriginalImagesBucket
+        - S3WritePolicy:
+            BucketName: !Ref ResizedImagesBucket
+    Metadata:
+      BuildMethod: makefile
+
+  ImageResizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ImageResizerFunction}"
+      RetentionInDays: 14
+
+  # ---------------------------------------------------------- Orchestration
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/vendedlogs/states/${AWS::StackName}-image-processing"
+      RetentionInDays: 14
+
+  ImageProcessingStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub "${AWS::StackName}-image-processing"
+      Type: STANDARD
+      DefinitionUri: statemachine/image_processing.asl.json
+      DefinitionSubstitutions:
+        ImageResizerFunctionArn: !GetAtt ImageResizerFunction.Arn
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ImageResizerFunction
+        - Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogDelivery
+                - logs:GetLogDelivery
+                - logs:UpdateLogDelivery
+                - logs:DeleteLogDelivery
+                - logs:ListLogDeliveries
+                - logs:PutResourcePolicy
+                - logs:DescribeResourcePolicies
+                - logs:DescribeLogGroups
+              Resource: "*"
+      Events:
+        # Trigger 1: a new object in the original bucket (via EventBridge).
+        ImageUploaded:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: [aws.s3]
+              detail-type: [Object Created]
+              detail:
+                bucket:
+                  name: [!Ref OriginalImagesBucket]
+        # Trigger 2: POST /resize with {"key": "<object key>"}.
+        ResizeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImageApi
+            Path: /resize
+            Method: post
+
+  # --------------------------------------------------------------- API
+  ImageApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
+      StageName: prod
+
+Outputs:
+  OriginalImagesBucketName:
+    Description: Upload images here
+    Value: !Ref OriginalImagesBucket
+  ResizedImagesBucketName:
+    Description: Thumbnails are written here
+    Value: !Ref ResizedImagesBucket
+  ImageResizerFunctionName:
+    Value: !Ref ImageResizerFunction
+  StateMachineArn:
+    Value: !Ref ImageProcessingStateMachine
+  ResizeApiUrl:
+    Description: POST {"key":"<object key>"} to start the workflow
+    Value: !Sub "https://${ImageApi}.execute-api.${AWS::Region}.amazonaws.com/prod/resize"

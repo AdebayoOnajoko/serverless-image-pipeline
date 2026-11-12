@@ -1,0 +1,71 @@
+{
+  "Comment": "Serverless image processing pipeline: resize an uploaded image to a thumbnail, then report success or failure.",
+  "StartAt": "ResizeImage",
+  "States": {
+    "ResizeImage": {
+      "Type": "Task",
+      "Comment": "Invoke the image resizer Lambda function with the execution input.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ImageResizerFunctionArn}",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "FormatUnexpectedError"
+        }
+      ],
+      "Next": "WasResizeSuccessful"
+    },
+    "FormatUnexpectedError": {
+      "Type": "Pass",
+      "Comment": "Turn an unexpected Lambda/runtime error into the same shape the function returns.",
+      "Parameters": {
+        "status": "FAILED",
+        "error.$": "$.errorInfo.Error",
+        "message.$": "$.errorInfo.Cause"
+      },
+      "Next": "WasResizeSuccessful"
+    },
+    "WasResizeSuccessful": {
+      "Type": "Choice",
+      "Comment": "Route on the status returned by the resize step.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.status", "IsPresent": true },
+            { "Variable": "$.status", "StringEquals": "SUCCEEDED" }
+          ],
+          "Next": "ResizeSucceeded"
+        }
+      ],
+      "Default": "ResizeFailed"
+    },
+    "ResizeSucceeded": {
+      "Type": "Succeed",
+      "Comment": "The thumbnail was written to the resized images bucket."
+    },
+    "ResizeFailed": {
+      "Type": "Fail",
+      "Comment": "The image could not be resized. Error and cause come from the resize step.",
+      "ErrorPath": "$.error",
+      "CausePath": "$.message"
+    }
+  }
+}

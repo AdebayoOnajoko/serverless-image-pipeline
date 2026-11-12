@@ -1,0 +1,16 @@
+{
+  "version": "0",
+  "id": "7b352a28-c55a-c327-159b-88bc97835d07",
+  "detail-type": "Object Created",
+  "source": "aws.s3",
+  "account": "111122223333",
+  "time": "2026-11-12T19:19:35Z",
+  "region": "ca-central-1",
+  "resources": ["arn:aws:s3:::onajoko-original-images"],
+  "detail": {
+    "version": "0",
+    "bucket": { "name": "onajoko-original-images" },
+    "object": { "key": "dog.jpg", "size": 343768 },
+    "reason": "PutObject"
+  }
+}

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Build output
+build/
+.aws-sam/
+*.zip
+
+# Local config / secrets
+samconfig.toml
+.env
+.DS_Store
+.idea/
+.vscode/
