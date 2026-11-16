@@ -7,8 +7,8 @@ bucket.
 The function is normally invoked by the Step Functions state machine, but it
 accepts three input shapes so the same code works for every trigger:
 
-1. Step Functions / API Gateway input:   {"key": "cat.jpg"}
-                                         {"bucket": "...", "key": "cat.jpg"}
+1. Step Functions / API Gateway input:   {"key": "dog.jpg"}
+                                         {"bucket": "...", "key": "dog.jpg"}
 2. EventBridge "Object Created" event:   {"detail": {"bucket": {"name": ...},
                                                      "object": {"key": ...}}}
 3. Classic S3 event notification:        {"Records": [{"s3": {...}}]}
@@ -98,7 +98,7 @@ def parse_event(event: dict[str, Any]) -> tuple[str, str]:
 
 
 def thumbnail_key_for(key: str) -> str:
-    """photos/cat.jpg -> photos/cat-thumbnail.jpg"""
+    """photos/dog.jpg -> photos/dog-thumbnail.jpg"""
     root, ext = posixpath.splitext(key)
     return f"{root}{THUMBNAIL_SUFFIX}{ext.lower()}"
 

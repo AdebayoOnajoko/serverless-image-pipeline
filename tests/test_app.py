@@ -50,14 +50,14 @@ def image_bytes(fmt="JPEG", size=(1200, 800), mode="RGB"):
 
 
 def test_resizes_jpeg_and_keeps_aspect_ratio(fake_s3):
-    fake_s3.objects[("original-bucket", "photos/cat.jpg")] = {"Body": image_bytes()}
+    fake_s3.objects[("original-bucket", "photos/dog.jpg")] = {"Body": image_bytes()}
 
-    result = app.lambda_handler({"key": "photos/cat.jpg"})
+    result = app.lambda_handler({"key": "photos/dog.jpg"})
 
     assert result["status"] == "SUCCEEDED"
-    assert result["destinationKey"] == "photos/cat-thumbnail.jpg"
+    assert result["destinationKey"] == "photos/dog-thumbnail.jpg"
     assert result["thumbnailSize"] == [200, 133]
-    stored = fake_s3.objects[("resized-bucket", "photos/cat-thumbnail.jpg")]
+    stored = fake_s3.objects[("resized-bucket", "photos/dog-thumbnail.jpg")]
     assert stored["ContentType"] == "image/jpeg"
     assert Image.open(io.BytesIO(stored["Body"])).size == (200, 133)
 
@@ -122,7 +122,7 @@ def test_missing_key_returns_failed(fake_s3):
 
 
 def test_other_bucket_is_rejected(fake_s3):
-    result = app.lambda_handler({"bucket": "someone-elses-bucket", "key": "cat.jpg"})
+    result = app.lambda_handler({"bucket": "someone-elses-bucket", "key": "dog.jpg"})
     assert result["status"] == "FAILED"
     assert result["error"] == "InvalidInput"
 
