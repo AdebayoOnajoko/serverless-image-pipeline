@@ -8,7 +8,7 @@ Python Lambda function using **Pillow** and saves the thumbnail in a second S3 b
 
 **Services:** Amazon S3 · AWS Lambda · AWS Step Functions · Amazon API Gateway · Amazon EventBridge · Amazon CloudWatch
 
-**Demo video:** [Watch the demo](VIDEO-LINK-HERE)
+**Demo video:** [Watch the demo](https://drive.google.com/file/d/1FG1RQ1IHR-THI6_v_vhOq1Zj8MtOWm3z/view?usp=sharing)
 
 ---
 
